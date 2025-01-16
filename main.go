@@ -1,92 +1,147 @@
 package main
 
 import (
-	"bufio"
-	"fmt"
-	"os"
-	"strings"
+	"bufio"   // Для построчного чтения файла
+	"fmt"     // Для форматированного ввода-вывода
+	"os"      // Для работы с файлами и аргументами командной строки
+	"strings" // Для работы со строками
 )
 
-func Banner() (map[rune][]string, error) {
-	// Открывает файл для чтения. Если файл не существует или недоступен, возвращается ошибка.
+// Структуры данных:
+type ASCIIChar struct {
+	lines [8]string // Хранит 8 строк ASCII-символа
+}
 
-	file, err = os.Open("standard.txt")
-	if err != nil {
-		return nil, err
+// ASCIIArt - основная структура, которая хранит весь шрифт
+type ASCIIArt struct {
+	chars map[rune]ASCIIChar // Карта, связывающая каждый символ (руну) с его ASCII-представлением
+}
+
+// NewASCIIArt - создает новый экземпляр структуры
+func NewASCIIArt() *ASCIIArt {
+	return &ASCIIArt{
+		chars: make(map[rune]ASCIIChar), // Инициализируем пустую карту для хранения символов
 	}
-	defer file.Close() //Закрывает файл автоматически после завершения функции, чтобы освободить ресурсы.
+}
 
-	banner := make(map[rune][]string) //Создает мапу, где ключ — это символ
-	scanner := bufio.NewScanner(file) //построчно read a file
+// LoadFont читает файл шрифта и загружает все символы в память
+// filename: имя файла шрифта для загрузки (например, "standard.txt")
+func (a *ASCIIArt) LoadFont(filename string) error {
+	// Открываем файл шрифта
+	file, err := os.Open(filename)
+	if err != nil {
+		return fmt.Errorf("failed to open %s: %v", filename, err)
+	}
+	defer file.Close() // Гарантируем закрытие файла после завершения функции
 
-	var currentRune rune = ' '
-	var lines []string
+	// Список всех поддерживаемых символов в порядке ASCII
+	// Этот массив определяет порядок, в котором символы читаются из файла шрифта
+	supportedChars := []rune{
+		' ', '!', '"', '#', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '.', '/',
+		'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
+		':', ';', '<', '=', '>', '?', '@',
+		'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M',
+		'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+		'[', '\\', ']', '^', '_', '`',
+		'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm',
+		'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
+		'{', '|', '}', '~',
+	}
+
+	scanner := bufio.NewScanner(file)
+	var currentLines [8]string // Хранит текущий обрабатываемый символ
+	lineIndex := 0             // Текущая строка внутри символа (0-7)
+	charIndex := 0             // Текущий обрабатываемый символ
+
+	// Читаем файл построчно
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if line == "" {
-			if currentRune != 0 {
-				banner[currentRune] = lines
+		if line == "" { // Пустая строка означает конец текущего символа
+			if lineIndex > 0 && charIndex < len(supportedChars) {
+				a.chars[supportedChars[charIndex]] = ASCIIChar{lines: currentLines}
+				charIndex++                // Переходим к следующему символу
+				lineIndex = 0              // Сбрасываем счётчик строк
+				currentLines = [8]string{} // Очищаем строки для следующего символа
 			}
-			currentRune++
-			lines = []string{}
 		} else {
-			lines = append(lines, line)
+			if lineIndex < 8 { // Сохраняем строку, если не превышен лимит в 8 строк
+				currentLines[lineIndex] = line
+				lineIndex++
+			}
 		}
 	}
-	if currentRune != 0 {
-		banner[currentRune] = lines
+
+	// Обрабатываем последний символ в файле
+	if lineIndex > 0 && charIndex < len(supportedChars) {
+		a.chars[supportedChars[charIndex]] = ASCIIChar{lines: currentLines}
 	}
-	return banner, nil
+
+	return nil
 }
 
-func Ascii(input string, banner map[rune][]string) string {
-	var result strings.Builder
-	lines := make([]string, 8)
+// RenderText преобразует входной текст в ASCII-арт представление
+// Возвращает полный ASCII-арт в виде строки
+func (a *ASCIIArt) RenderText(input string) string {
+	var result strings.Builder // Эффективно строит результирующую строку
 
-	for _, char := range input {
-		if char == '\n' {
-			for i := 0; i < 8; i++ {
-				lines[i] += "$"
-			}
-			result.WriteString(strings.Join(lines, "\n") + "\n\n")
-			lines = make([]string, 8)
+	// Обработка особых случаев
+	if input == "" {
+		return "" // Пустой ввод
+	}
+	// if input "\n" then return "$"
+	if input == "\\n" {
+		return "$" // Только перенос строки
+	}
+
+	// Разделяем ввод на строки по символам \n
+	lines := strings.Split(input, "\\n")
+
+	// Обрабатываем каждую строку ввода
+	for i, line := range lines {
+		if line == "" { // Обработка пустых строк
+			result.WriteString("$\n")
 			continue
 		}
 
-		asciiArt, exists := banner[char]
-		if !exists {
-			asciiArt = banner[' ']
+		// Преобразуем текущую строку в ASCII-арт
+		artLines := [8]string{} // Хранит 8 строк текущего блока
+		for _, char := range line {
+			if art, exists := a.chars[char]; exists {
+				// Строим каждую строку ASCII-арта
+				for j := 0; j < 8; j++ {
+					artLines[j] += art.lines[j]
+				}
+			}
 		}
 
-		for i := 0; i < 8; i++ {
-			lines[i] += asciiArt[i]
+		// Добавляем $ в конец каждой строки и соединяем переносами строк
+		for j := 0; j < 8; j++ {
+			result.WriteString(artLines[j])
+			result.WriteString("$\n")
+		}
+
+		// Обрабатываем пробелы между блоками текста
+		// Добавляем дополнительный пробел только если не в конце или если ввод заканчивается на \n
+		if i < len(lines)-1 || (len(input) >= 2 && input[len(input)-2:] == "\\n") {
+			result.WriteString("")
 		}
 	}
-
-	for i := 0; i < 8; i++ {
-		lines[i] += "$"
-	}
-	result.WriteString(strings.Join(lines, "\n"))
 
 	return result.String()
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Println("Usage: go run main.go <name>") //Она проверяет, передан ли аргумент командной строки.
+	if len(os.Args) != 2 { // Проверяем правильное количество аргументов
 		return
 	}
-
-	input := os.Args[1]
-
-	//Создаем массив из 8 строк для хранения строк ASCII-арта
-	banner, err := Banner()
-	if err != nil {
-		fmt.Println("Error: ", err)
+	// Создаём новый обработчик ASCII-арта и загружаем шрифт
+	ascii := NewASCIIArt()
+	if err := ascii.LoadFont("standard.txt"); err != nil {
+		fmt.Printf("Error loading font: %v\n", err)
 		return
 	}
-	output := Ascii(input, banner)
-	fmt.Println(output) //Выводим результат на экран
-
+	// Преобразуем входной текст в ASCII-арт и выводим
+	output := ascii.RenderText(os.Args[1])
+	fmt.Print(output)
 }
